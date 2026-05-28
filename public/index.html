@@ -18,33 +18,26 @@
         </div>
 
         <nav id="sideNav" class="side-nav" aria-label="主导航">
-          <button class="active" data-page="dashboard" type="button"><span>⌂</span>总览驾驶舱</button>
-          <button data-page="assets" type="button"><span>▦</span>数据资产目录</button>
-          <button data-page="dictionary" type="button"><span>◇</span>标准字典/主数据</button>
-          <button data-page="workflow" type="button"><span>⇄</span>数据治理任务流</button>
-          <button data-page="graph" type="button"><span>◎</span>知识库/知识图谱</button>
-          <button data-page="agents" type="button"><span>◈</span>Agent 应用</button>
-          <button data-page="audit" type="button"><span>▣</span>评测与审计</button>
+          <button class="active" data-page="dashboard" type="button"><span>⌂</span>治理驾驶舱</button>
+          <button data-page="ingest" type="button"><span>▦</span>数据接入</button>
+          <button data-page="workbench" type="button"><span>⇄</span>AI治理工作台</button>
+          <button data-page="rag" type="button"><span>◎</span>知识库/RAG检索</button>
+          <button data-page="agent" type="button"><span>◈</span>Agent应用与知识运营</button>
         </nav>
 
         <div class="sidebar-card">
-          <span>本地模拟系统</span>
-          <p>上传、表单、治理、入库和 Agent 编排均使用前端 mock 数据，并保存到 localStorage。</p>
+          <span>本地 Mock Demo</span>
+          <p>围绕压载泵振动温升主案例，演示 AI 数据治理、知识入库、RAG 检索和 Agent 应用闭环。</p>
         </div>
       </aside>
 
       <main class="main">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Enterprise Data Governance Demo</p>
-            <h1 id="pageTitle">船舶制造/修理质量-缺陷-故障知识库 Agent</h1>
+            <p class="eyebrow">AI Data Governance & RAG Agent Demo</p>
+            <h1 id="pageTitle">AI辅助数据治理与RAG Agent知识库落地Demo</h1>
           </div>
           <div class="top-actions">
-            <div id="roleSwitch" class="role-switch" aria-label="角色切换">
-              <button class="active" data-role="group" type="button">集团</button>
-              <button data-role="subsidiary" type="button">子公司</button>
-              <button data-role="frontline" type="button">一线</button>
-            </div>
             <span class="sync-dot"></span>
             <span id="stateStatus">模拟数据已加载</span>
             <button id="rerunBtn" class="icon-btn" type="button" aria-label="重新生成">↻</button>
