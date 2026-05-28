@@ -1385,6 +1385,10 @@ textarea {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.architecture-flow {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
 .solution-flow article,
 .scenario-focus article,
 .result-panel article,
@@ -1612,6 +1616,46 @@ textarea {
   gap: 12px;
 }
 
+.rag-hit-strip {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid rgba(29, 95, 209, 0.16);
+  border-radius: 8px;
+  background: #f7faff;
+}
+
+.rag-hit-strip > div:last-child {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rag-hit-strip article {
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.rag-hit-strip strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.rag-hit-strip p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.rag-hit-strip span {
+  color: var(--brand-2);
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .rag-results span {
   color: var(--brand-2);
   font-size: 12px;
@@ -1715,6 +1759,7 @@ textarea {
   }
 
   .solution-flow,
+  .architecture-flow,
   .agent-chain {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1728,11 +1773,13 @@ textarea {
 
 @media (max-width: 760px) {
   .solution-flow,
+  .architecture-flow,
   .scenario-focus,
   .access-kinds,
   .result-panel,
   .agent-chain,
   .agent-output-grid,
+  .rag-hit-strip > div:last-child,
   .step-rail button,
   .triple-mini div {
     grid-template-columns: 1fr;

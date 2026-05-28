@@ -263,11 +263,11 @@ function renderDashboard() {
       ["知识库有效引用率", `${state.metrics.citationRate}%`, "RAG引用"],
       ["相似案例命中率", `${state.metrics.similarRate}%`, "案例召回"]
     ])}
-    <section class="panel">
-      <div class="section-heading compact"><div><p class="eyebrow">Operating Model</p><h2>落地闭环主线</h2></div></div>
-      <div class="solution-flow">
-        ${["AI辅助数据治理", "高质量知识库", "RAG检索", "Agent业务应用", "知识运营反馈"].map((item, index) => `
-          <article><span>${index + 1}</span><strong>${item}</strong><p>${flowNote(index)}</p></article>
+    <section class="panel solution-architecture-card">
+      <div class="section-heading compact"><div><p class="eyebrow">Solution Architecture</p><h2>解决方案架构卡片</h2></div></div>
+      <div class="solution-flow architecture-flow">
+        ${["业务数据来源", "AI辅助数据治理", "高质量知识库/主数据/知识图谱", "RAG检索", "Agent工具编排", "业务建议输出", "评测与反馈回流"].map((item, index) => `
+          <article><span>${index + 1}</span><strong>${item}</strong><p>${architectureNote(index)}</p></article>
         `).join("")}
       </div>
     </section>
@@ -287,11 +287,13 @@ function renderDashboard() {
   `;
 }
 
-function flowNote(index) {
+function architectureNote(index) {
   return [
+    "维修工单、设备台账、SOP、检测报告、图片和音频进入接入层。",
     "把口语化维修记录转成结构化事实。",
-    "只沉淀经过标准化和复核的可信知识。",
+    "沉淀经过标准化和复核的案例、主数据、SOP与图谱关系。",
     "按主数据、案例、SOP和规范召回知识。",
+    "按意图调用主数据、RAG、图谱和质量检查工具。",
     "生成带引用依据和低置信提示的业务建议。",
     "采纳、补字段、知识缺口回流到治理。"
   ][index];
@@ -463,11 +465,23 @@ function renderAgent() {
   return `
     <section class="agent-layout focused-agent">
       <div class="panel">
-        <div class="section-heading compact"><div><p class="eyebrow">Agent Chain</p><h2>Agent调用链</h2></div></div>
+        <div class="section-heading compact"><div><p class="eyebrow">RAG + Agent Chain</p><h2>RAG + Agent 调用链</h2></div></div>
         <div class="agent-chain">
           ${["用户问题", "意图识别", "主数据匹配", "RAG检索", "图谱查询", "数据质量检查", "生成业务建议", "引用依据", "反馈回流"].map((item, index) => `
             <article><span>${index + 1}</span><strong>${item}</strong></article>
           `).join("")}
+        </div>
+        <div class="rag-hit-strip">
+          <div class="section-heading compact"><div><p class="eyebrow">RAG Hits</p><h2>RAG命中结果</h2></div></div>
+          <div>
+            ${ragKnowledge.map((item) => `
+              <article>
+                <strong>${item.title}</strong>
+                <p>${item.reason}</p>
+                <span>${item.trust}｜${item.published}</span>
+              </article>
+            `).join("")}
+          </div>
         </div>
         <div class="rag-search">
           <label>Agent示例问题<textarea id="agentInput">${state.agentQuestion}</textarea></label>
@@ -484,7 +498,7 @@ function renderAgent() {
         ${evidenceBlock("低置信度项", ["轴承磨损，需要人工复核"])}
       </aside>
       <section class="panel span-full">
-        <div class="section-heading compact"><div><p class="eyebrow">Knowledge Ops</p><h2>知识运营指标</h2></div></div>
+        <div class="section-heading compact"><div><p class="eyebrow">Business Value</p><h2>业务价值指标</h2></div></div>
         ${metricsGrid([
           ["知识库有效引用率", `${state.metrics.citationRate}%`, "RAG引用"],
           ["相似案例命中率", `${state.metrics.similarRate}%`, "案例召回"],
