@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>船舶质量知识库 Agent Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">SQ</div>
+          <div>
+            <p>ShipQuality KB</p>
+            <strong>质量知识治理平台</strong>
+          </div>
+        </div>
+
+        <nav id="sideNav" class="side-nav" aria-label="主导航">
+          <button class="active" data-page="dashboard" type="button"><span>⌂</span>总览驾驶舱</button>
+          <button data-page="assets" type="button"><span>▦</span>数据资产目录</button>
+          <button data-page="dictionary" type="button"><span>◇</span>标准字典/主数据</button>
+          <button data-page="workflow" type="button"><span>⇄</span>数据治理任务流</button>
+          <button data-page="graph" type="button"><span>◎</span>知识库/知识图谱</button>
+          <button data-page="agents" type="button"><span>◈</span>Agent 应用</button>
+          <button data-page="audit" type="button"><span>▣</span>评测与审计</button>
+        </nav>
+
+        <div class="sidebar-card">
+          <span>本地模拟系统</span>
+          <p>上传、表单、治理、入库和 Agent 编排均使用前端 mock 数据，并保存到 localStorage。</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Enterprise Data Governance Demo</p>
+            <h1 id="pageTitle">船舶制造/修理质量-缺陷-故障知识库 Agent</h1>
+          </div>
+          <div class="top-actions">
+            <div id="roleSwitch" class="role-switch" aria-label="角色切换">
+              <button class="active" data-role="group" type="button">集团</button>
+              <button data-role="subsidiary" type="button">子公司</button>
+              <button data-role="frontline" type="button">一线</button>
+            </div>
+            <span class="sync-dot"></span>
+            <span id="stateStatus">模拟数据已加载</span>
+            <button id="rerunBtn" class="icon-btn" type="button" aria-label="重新生成">↻</button>
+          </div>
+        </header>
+
+        <section id="pageContent" class="page-content"></section>
+      </main>
+    </div>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
