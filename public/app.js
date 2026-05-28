@@ -2,7 +2,9 @@ const storeKeys = {
   tasks: "shipQuality.tasks",
   uploads: "shipQuality.uploads",
   aliases: "shipQuality.aliases",
-  cases: "shipQuality.cases"
+  cases: "shipQuality.cases",
+  masterRecords: "shipQuality.masterRecords",
+  auditLogs: "shipQuality.auditLogs"
 };
 
 const pages = {
@@ -83,6 +85,21 @@ const baseAliases = [
   ["泵抖得厉害", "异常振动", "设备故障", "EQP_VIB_HIGH"],
   ["轴承热", "温度升高", "设备故障", "EQP_TEMP_HIGH"],
   ["对中不好", "联轴器不对中", "设备故障", "EQP_MISALIGN"]
+];
+
+const baseMasterRecords = [
+  { id: "MD-WELD-034-08", scenario: "quality", name: "焊缝 W-B3-P-034-08", code: "WELD-B3-L034-P08", aliases: ["B3左34#纵缝08", "34号纵缝片位08"], domain: "焊接工序", confidence: 0.94, status: "已确认", version: "v2.1" },
+  { id: "MD-WPS-136", scenario: "quality", name: "WPS-136-FCAW", code: "PROC-WPS-136", aliases: ["136药芯焊", "FCAW-136"], domain: "焊接工艺", confidence: 0.88, status: "待复核", version: "v1.6" },
+  { id: "MD-PIPE-2207", scenario: "field", name: "管段 P-BW-2207", code: "PIPE-BW-P-2207", aliases: ["P-BW2207", "压载水管2207"], domain: "压载水系统", confidence: 0.93, status: "已确认", version: "v3.4" },
+  { id: "MD-DWG-M174", scenario: "field", name: "图纸 M-17.4", code: "DWG-MECH-17-4", aliases: ["模型M17.4", "M-17.4版"], domain: "机装图纸", confidence: 0.86, status: "待复核", version: "v2.0" },
+  { id: "MD-PUMP-BP02", scenario: "equipment", name: "压载泵 BP-02", code: "EQP-BALLAST-PUMP-02", aliases: ["BP02", "2号压载泵"], domain: "压载水系统", confidence: 0.96, status: "已确认", version: "v4.2" },
+  { id: "MD-SP-BRG6309", scenario: "equipment", name: "轴承 SP-BRG-6309", code: "SPARE-BRG-6309", aliases: ["6309轴承", "BP02驱动端轴承"], domain: "备件主数据", confidence: 0.78, status: "待复核", version: "v1.3" }
+];
+
+const baseAuditLogs = [
+  { time: "09:12:31", actor: "系统", action: "初始化", target: "演示数据", detail: "加载 3 条基础治理任务、3 条知识案例和标准字典", type: "system" },
+  { time: "09:16:08", actor: "治理编排 Agent", action: "知识引用", target: "压载水系统", detail: "引用案例 KB-1002 / KB-1003 支撑跨场景联调判断", type: "agent" },
+  { time: "09:18:42", actor: "质量专家", action: "人工复核", target: "RT-26-0511", detail: "确认未熔合与返修复验字段可入库", type: "review" }
 ];
 
 const baseTasks = [
@@ -202,7 +219,9 @@ const state = {
   tasks: load(storeKeys.tasks, baseTasks),
   uploads: load(storeKeys.uploads, []),
   aliases: load(storeKeys.aliases, baseAliases),
-  cases: load(storeKeys.cases, baseCases)
+  cases: load(storeKeys.cases, baseCases),
+  masterRecords: load(storeKeys.masterRecords, baseMasterRecords),
+  auditLogs: load(storeKeys.auditLogs, baseAuditLogs)
 };
 
 hydrateDefaults();
@@ -221,16 +240,24 @@ function load(key, fallback) {
 }
 
 function hydrateDefaults() {
+  state.aliases = state.aliases.map(normalizeAliasRow);
   const aliasKeys = new Set(state.aliases.map((row) => `${row[0]}|${row[1]}|${row[2]}`));
   baseAliases.forEach((row) => {
     const key = `${row[0]}|${row[1]}|${row[2]}`;
-    if (!aliasKeys.has(key)) state.aliases.push(row);
+    if (!aliasKeys.has(key)) state.aliases.push(normalizeAliasRow(row));
   });
 
   const caseIds = new Set(state.cases.map((item) => item.id));
   baseCases.forEach((item) => {
     if (!caseIds.has(item.id)) state.cases.push(item);
   });
+
+  const masterIds = new Set(state.masterRecords.map((item) => item.id));
+  baseMasterRecords.forEach((item) => {
+    if (!masterIds.has(item.id)) state.masterRecords.push(item);
+  });
+
+  if (!state.auditLogs.length) state.auditLogs = baseAuditLogs;
 }
 
 function save() {
@@ -238,7 +265,33 @@ function save() {
   localStorage.setItem(storeKeys.uploads, JSON.stringify(state.uploads));
   localStorage.setItem(storeKeys.aliases, JSON.stringify(state.aliases));
   localStorage.setItem(storeKeys.cases, JSON.stringify(state.cases));
+  localStorage.setItem(storeKeys.masterRecords, JSON.stringify(state.masterRecords));
+  localStorage.setItem(storeKeys.auditLogs, JSON.stringify(state.auditLogs));
   stateStatus.textContent = `已保存 ${state.tasks.length} 个治理任务`;
+}
+
+function normalizeAliasRow(row) {
+  return [
+    row[0],
+    row[1],
+    row[2],
+    row[3],
+    row[4] || "v1.0",
+    row[5] || 0.92,
+    row[6] || "已确认"
+  ];
+}
+
+function logAction(action, target, detail, type = "operation", actor = "当前用户") {
+  state.auditLogs.unshift({
+    time: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+    actor,
+    action,
+    target,
+    detail,
+    type
+  });
+  state.auditLogs = state.auditLogs.slice(0, 80);
 }
 
 function createTask({ id, scenario, source, raw, issues, score = 55, fileName = "", fileType = "", recognition = "" }) {
@@ -605,7 +658,9 @@ function scenarioOptions(selected = "quality") {
 }
 
 function renderDictionary() {
-  const rows = state.aliases.filter((row) => row[2] === scenarios[state.dictScenario].label);
+  const rows = state.aliases
+    .map((row, index) => ({ row: normalizeAliasRow(row), index }))
+    .filter(({ row }) => row[2] === scenarios[state.dictScenario].label);
   return `
     <section class="content-grid">
       <article class="panel span-4">
@@ -627,13 +682,62 @@ function renderDictionary() {
           <article><strong>复核策略</strong><span>人机协同</span><p>置信度低于 0.85 或一词多义时进入人工确认队列。</p></article>
         </div>
         <div class="data-table">
-          <div class="table-head"><span>标准名称</span><span>标准编码</span><span>历史别名</span><span>所属系统/工序</span><span>匹配置信度</span><span>人工确认</span></div>
-          ${rows.map(([alias, standard, type, code], index) => `
-            <div><span>${standard}</span><span>${code}</span><span>${alias}</span><span>${type}</span><span>${Math.max(81, 96 - index * 4)}%</span><span>已确认</span></div>
+          <div class="table-head"><span>标准名称</span><span>标准编码</span><span>历史别名</span><span>所属域</span><span>版本</span><span>置信度</span><span>人工确认</span></div>
+          ${rows.map(({ row: [alias, standard, type, code, version, confidence, status], index }) => `
+            <div>
+              <span>${standard}</span>
+              <span>${code}</span>
+              <span>${alias}</span>
+              <span>${type}</span>
+              <span>${version}</span>
+              <span>${Math.round(confidence * 100)}%</span>
+              <span>${status === "已确认" ? "已确认" : `<button class="inline-btn" data-alias-confirm="${index}" type="button">确认</button>`}</span>
+            </div>
           `).join("")}
         </div>
+        ${renderMasterCandidates()}
+        ${renderDictionaryVersions(rows)}
       </article>
     </section>
+  `;
+}
+
+function renderMasterCandidates() {
+  const rows = state.masterRecords.filter((item) => item.scenario === state.dictScenario);
+  return `
+    <div class="sub-section">
+      <div class="section-heading compact"><div><p class="eyebrow">Master Candidates</p><h2>主数据候选匹配</h2></div><span class="status-pill">${rows.length} 个候选</span></div>
+      <div class="master-candidates">
+        ${rows.map((item) => `
+          <article>
+            <div><strong>${item.name}</strong><span>${item.code}</span></div>
+            <p>${item.aliases.join(" / ")}｜${item.domain}</p>
+            <div class="candidate-foot">
+              <em>置信度 ${Math.round(item.confidence * 100)}%｜${item.version}</em>
+              ${item.status === "已确认" ? `<b>已确认</b>` : `<button class="inline-btn" data-master-confirm="${item.id}" type="button">人工确认</button>`}
+            </div>
+          </article>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderDictionaryVersions(rows) {
+  const recent = rows.slice(-4).reverse();
+  return `
+    <div class="sub-section">
+      <div class="section-heading compact"><div><p class="eyebrow">Version Records</p><h2>字典版本记录</h2></div></div>
+      <div class="version-records">
+        ${recent.map(({ row: [alias, standard, type, code, version, confidence, status] }) => `
+          <article>
+            <strong>${version}｜${standard}</strong>
+            <p>${alias} → ${code}｜${type}｜置信度 ${Math.round(confidence * 100)}%</p>
+            <span>${status}｜来源：字典维护/人工复核</span>
+          </article>
+        `).join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -731,7 +835,7 @@ function taskDetail(task) {
     standard: detailBlock("标准化建议", task.standard) + detailBlock("命中字典", dictionaryRows(task)),
     master: detailBlock("主数据匹配候选", task.master) + detailBlock("实体对齐策略", masterStrategy(task)),
     quality: detailBlock("缺失字段", task.missing) + detailBlock("低置信度项", task.lowConfidence) + detailBlock("质量规则", qualityRows(task)),
-    review: `<div class="review-box"><strong>人工复核区</strong><p>${task.needsReview ? "请确认低置信字段、主数据候选与标准化建议。" : "已人工确认，可进入入库环节。"}</p><textarea placeholder="填写专家复核意见">${task.reviewNote || ""}</textarea></div>`,
+    review: `<div class="review-box"><strong>人工复核区</strong><p>${task.needsReview ? "请确认低置信字段、主数据候选与标准化建议。" : "已人工确认，可进入入库环节。"}</p><textarea data-review-note="${task.id}" placeholder="填写专家复核意见">${task.reviewNote || ""}</textarea></div>`,
     graph: detailBlock("图谱三元组", task.triples.map((triple) => triple.join(" → "))) + graphPreview(task),
     result: detailBlock("入知识库结果", [task.result]) + detailBlock("回流动作", feedbackRows(task))
   };
@@ -1127,6 +1231,24 @@ function renderAudit() {
         ${[["字段标准化准确率", 91, "基于标准字典和人工确认回流"], ["主数据匹配命中", 86, "候选实体相似度与专家确认"], ["Agent 采纳率", 78, "跨场景输出仍需专家复核"], ["审计可追溯", 94, "保留来源、动作、状态和入库结果"]].map(([label, value, note]) => `<article class="eval-card"><div><strong>${label}</strong><span>${value}%</span></div><div class="bar"><i style="width:${value}%"></i></div><p>${note}</p></article>`).join("")}
       </div>
     </section>
+    <section class="content-grid">
+      <article class="panel span-6">
+        <div class="section-heading compact"><div><p class="eyebrow">Knowledge Citation</p><h2>知识引用审计</h2></div><span class="status-pill">${state.cases.length} 案例</span></div>
+        <div class="audit-list">${knowledgeCitationRows().join("")}</div>
+      </article>
+      <article class="panel span-6">
+        <div class="section-heading compact"><div><p class="eyebrow">Review Risk</p><h2>低置信度与人工复核点</h2></div></div>
+        <div class="audit-list">${reviewRiskRows().join("")}</div>
+      </article>
+      <article class="panel span-7">
+        <div class="section-heading compact"><div><p class="eyebrow">Tool Chain</p><h2>Agent / 工具调用链</h2></div></div>
+        <div class="tool-chain">${toolChainRows().join("")}</div>
+      </article>
+      <article class="panel span-5">
+        <div class="section-heading compact"><div><p class="eyebrow">Ingestion</p><h2>入库记录</h2></div></div>
+        <div class="audit-list">${ingestionRows().join("")}</div>
+      </article>
+    </section>
     <section class="panel">
       <div class="section-heading compact"><div><p class="eyebrow">Closed Loop</p><h2>闭环反馈记录</h2></div></div>
       <div class="feedback-grid">
@@ -1139,7 +1261,75 @@ function renderAudit() {
         `).join("")}
       </div>
     </section>
+    <section class="panel">
+      <div class="section-heading compact"><div><p class="eyebrow">Operation Log</p><h2>操作日志与反馈回流</h2></div><span class="status-pill">${state.auditLogs.length} 条</span></div>
+      <div class="operation-log">
+        ${state.auditLogs.slice(0, 12).map((log) => `
+          <article class="${log.type}">
+            <span>${log.time}</span>
+            <strong>${log.actor}｜${log.action}</strong>
+            <p>${log.target}：${log.detail}</p>
+          </article>
+        `).join("")}
+      </div>
+    </section>
   `;
+}
+
+function knowledgeCitationRows() {
+  return state.cases.slice().reverse().slice(0, 6).map((item) => `
+    <article>
+      <strong>${item.id}｜${item.title}</strong>
+      <p>${scenarios[item.scenario].label}｜风险 ${item.risk}｜${item.triples.length} 条图谱关系被纳入检索范围</p>
+      <span>引用方式：相似案例召回 / 图谱实体扩展 / Agent 证据链</span>
+    </article>
+  `);
+}
+
+function reviewRiskRows() {
+  const rows = state.tasks.flatMap((task) => {
+    const low = task.lowConfidence.length ? task.lowConfidence : [task.issues];
+    return low.map((item) => ({ task, item }));
+  }).slice(0, 6);
+  return rows.map(({ task, item }) => `
+    <article>
+      <strong>${task.id}｜${scenarios[task.scenario].label}</strong>
+      <p>${item}</p>
+      <span>${task.needsReview ? "待人工复核" : "已确认"}｜质量评分 ${task.score}</span>
+    </article>
+  `);
+}
+
+function toolChainRows() {
+  const task = selectedTask();
+  const rows = [
+    ["数据接入器", "读取文件/表单元信息", task.source, "成功"],
+    ["字段抽取器", "抽取对象、现象、检测值、措施", `${task.extract.length || scenarioExtract(task).length} 个字段`, task.extract.length ? "已执行" : "可执行"],
+    ["标准匹配器", "匹配字典、别名和标准编码", `${task.standard.length || scenarioStandard(task).length} 条建议`, task.standard.length ? "已执行" : "可执行"],
+    ["主数据匹配器", "召回设备/管段/焊缝候选", `${task.master.length || scenarioMaster(task).length} 个候选`, task.master.length ? "已执行" : "可执行"],
+    ["图谱写入器", "生成案例节点和三元组关系", `${task.triples.length || scenarioTriples(task).length} 条关系`, task.status === "已入库" ? "已写入" : "待入库"],
+    ["治理编排 Agent", "调度三个子 Agent 并合并输出", state.collabRan ? "已运行" : "待运行", state.collabRan ? "已审计" : "未触发"]
+  ];
+  return rows.map(([tool, action, output, status], index) => `
+    <article>
+      <span>${index + 1}</span>
+      <div><strong>${tool}</strong><p>${action}</p></div>
+      <em>${output}</em>
+      <b>${status}</b>
+    </article>
+  `);
+}
+
+function ingestionRows() {
+  const ingested = state.tasks.filter((task) => task.status === "已入库").slice(-5).reverse();
+  const rows = ingested.length ? ingested : state.tasks.slice(-3).reverse();
+  return rows.map((task) => `
+    <article>
+      <strong>${task.id}｜${task.status}</strong>
+      <p>${task.result}</p>
+      <span>${task.status === "已入库" ? "已写入案例库/图谱/评测样本" : "待完成治理动作后入库"}</span>
+    </article>
+  `);
 }
 
 function pipelineCards() {
@@ -1169,6 +1359,14 @@ function initialRecognition(type, scenario) {
 
 function runTaskAction(action) {
   const task = selectedTask();
+  const actionLabels = {
+    extract: "字段抽取",
+    standard: "标准化匹配",
+    master: "主数据对齐",
+    quality: "数据质量校验",
+    confirm: "人工确认",
+    ingest: "入知识库/图谱"
+  };
   const templates = {
     extract: () => {
       task.extract = scenarioExtract(task);
@@ -1214,6 +1412,7 @@ function runTaskAction(action) {
     }
   };
   templates[action]();
+  logAction(actionLabels[action], task.id, `${scenarios[task.scenario].label}任务状态更新为：${task.status}`, action === "ingest" ? "ingest" : action === "confirm" ? "review" : "governance");
   save();
   render();
 }
@@ -1360,6 +1559,7 @@ document.addEventListener("click", (event) => {
   }
 
   if (event.target.closest("[data-demo-run]")) {
+    logAction("一键演示", "压载水系统联调异常", "自动生成跨场景治理任务、知识案例和 Agent 编排输出", "agent", "治理编排 Agent");
     runDemoMode();
   }
 
@@ -1399,13 +1599,39 @@ document.addEventListener("click", (event) => {
   const agentButton = event.target.closest("[data-agent-id]");
   if (agentButton) {
     state.selectedAgentId = agentButton.dataset.agentId;
+    logAction("查看 Agent", agents.find((item) => item.id === state.selectedAgentId)?.name || "Agent", "打开 Agent 详情、分析标准和知识调用链", "agent");
     render();
   }
 
   if (event.target.closest("[data-run-collab]")) {
     state.collabQuestion = document.querySelector("#collabInput")?.value || state.collabQuestion;
     state.collabRan = true;
+    logAction("运行编排 Agent", "三 Agent 协同演示", "拆分现场缺陷、质量异常、设备故障三个子任务并合并输出", "agent", "治理编排 Agent");
+    save();
     render();
+  }
+
+  const aliasConfirm = event.target.closest("[data-alias-confirm]");
+  if (aliasConfirm) {
+    const row = state.aliases[Number(aliasConfirm.dataset.aliasConfirm)];
+    if (row) {
+      row[6] = "已确认";
+      logAction("确认别名映射", row[1], `${row[0]} → ${row[1]}，版本 ${row[4]}`, "review", "标准管理员");
+      save();
+      render();
+    }
+  }
+
+  const masterConfirm = event.target.closest("[data-master-confirm]");
+  if (masterConfirm) {
+    const record = state.masterRecords.find((item) => item.id === masterConfirm.dataset.masterConfirm);
+    if (record) {
+      record.status = "已确认";
+      record.version = bumpVersion(record.version);
+      logAction("确认主数据候选", record.name, `${record.code} 置信度 ${Math.round(record.confidence * 100)}%，版本升级到 ${record.version}`, "review", "主数据管理员");
+      save();
+      render();
+    }
   }
 });
 
@@ -1424,7 +1650,7 @@ document.addEventListener("change", (event) => {
       const recognition = initialRecognition(fileType, scenario);
       const upload = { fileName: file.name, fileType, source, scenario, recognition, needsReview: true };
       state.uploads.push(upload);
-      state.tasks.push(createTask({
+      const task = createTask({
         scenario,
         source,
         raw: `${file.name}（${fileType}）导入记录：${recognition}`,
@@ -1433,11 +1659,22 @@ document.addEventListener("change", (event) => {
         fileName: file.name,
         fileType,
         recognition
-      }));
+      });
+      state.tasks.push(task);
+      logAction("历史数据导入", task.id, `${file.name}（${fileType}）已生成待治理任务`, "operation");
     });
     event.target.value = "";
     save();
     render();
+  }
+
+  if (event.target.matches("[data-review-note]")) {
+    const task = state.tasks.find((item) => item.id === event.target.dataset.reviewNote);
+    if (task) {
+      task.reviewNote = event.target.value;
+      logAction("填写复核意见", task.id, event.target.value || "清空复核意见", "review", "业务专家");
+      save();
+    }
   }
 });
 
@@ -1449,13 +1686,15 @@ document.addEventListener("submit", (event) => {
     const scenario = form.get("scenario");
     const values = [...form.entries()].filter(([key]) => key !== "scenario" && String(form.get(key)).trim());
     const raw = values.map(([key, value]) => `${key}:${value}`).join("；") || `${scenarios[scenario].label}新增采集记录`;
-    state.tasks.push(createTask({
+    const task = createTask({
       scenario,
       source: "新增数据采集表单",
       raw,
       issues: "新增记录字段完整性、标准化和主数据映射待校验",
       score: 70
-    }));
+    });
+    state.tasks.push(task);
+    logAction("新增数据采集", task.id, `${scenarios[scenario].label}表单生成待治理任务`, "operation");
     save();
     state.page = "workflow";
     state.selectedTaskId = state.tasks[state.tasks.length - 1].id;
@@ -1467,11 +1706,17 @@ document.addEventListener("submit", (event) => {
     const alias = String(form.get("alias") || "").trim();
     const standard = String(form.get("standard") || "").trim();
     if (!alias || !standard) return;
-    state.aliases.push([alias, standard, scenarios[state.dictScenario].label, `MD-${state.aliases.length + 100}`]);
+    state.aliases.push([alias, standard, scenarios[state.dictScenario].label, `MD-${state.aliases.length + 100}`, `v1.${state.aliases.length % 9}`, 0.86, "待确认"]);
+    logAction("新增别名映射", standard, `${alias} → ${standard}，进入标准管理员确认`, "operation", "标准管理员");
     save();
     render();
   }
 });
+
+function bumpVersion(version = "v1.0") {
+  const [major, minor] = version.replace("v", "").split(".").map((part) => Number(part) || 0);
+  return `v${major}.${minor + 1}`;
+}
 
 document.querySelector("#rerunBtn").addEventListener("click", () => {
   stateStatus.textContent = "模拟流程已刷新";

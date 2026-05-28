@@ -259,6 +259,17 @@ textarea {
   background: #e9f0fb;
 }
 
+.inline-btn {
+  border: 1px solid rgba(29, 95, 209, 0.24);
+  border-radius: 7px;
+  padding: 5px 8px;
+  color: var(--brand);
+  background: #eef5ff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1158,7 +1169,7 @@ textarea {
 
 .data-table > div {
   display: grid;
-  grid-template-columns: 1.1fr 1fr 1fr 1fr 0.8fr 0.8fr;
+  grid-template-columns: 1.1fr 1fr 1fr 1fr 0.7fr 0.7fr 0.8fr;
   gap: 10px;
   padding: 11px 12px;
   border-bottom: 1px solid var(--line);
@@ -1183,6 +1194,158 @@ textarea {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.sub-section {
+  margin-top: 16px;
+}
+
+.master-candidates,
+.version-records,
+.audit-list,
+.operation-log {
+  display: grid;
+  gap: 10px;
+}
+
+.master-candidates {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.master-candidates article,
+.version-records article,
+.audit-list article,
+.operation-log article {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.master-candidates article > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.master-candidates strong,
+.version-records strong,
+.audit-list strong,
+.operation-log strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.master-candidates span,
+.version-records span,
+.audit-list span,
+.operation-log span {
+  color: var(--brand-2);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.master-candidates p,
+.version-records p,
+.audit-list p,
+.operation-log p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.candidate-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.candidate-foot em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.candidate-foot b {
+  color: var(--success);
+  font-size: 12px;
+}
+
+.tool-chain {
+  display: grid;
+  gap: 9px;
+}
+
+.tool-chain article {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) minmax(140px, 0.45fr) 78px;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.tool-chain article > span {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--brand);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tool-chain strong {
+  display: block;
+  font-size: 14px;
+}
+
+.tool-chain p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tool-chain em,
+.tool-chain b {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.tool-chain b {
+  color: var(--brand);
+}
+
+.operation-log article {
+  display: grid;
+  grid-template-columns: 80px 180px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.operation-log article.agent {
+  border-color: rgba(12, 163, 182, 0.24);
+  background: #f3fbfd;
+}
+
+.operation-log article.review {
+  border-color: rgba(21, 132, 90, 0.22);
+  background: #f2faf6;
+}
+
+.operation-log article.ingest {
+  border-color: rgba(29, 95, 209, 0.24);
+  background: #f4f8ff;
 }
 
 .dictionary-summary article,
@@ -2553,7 +2716,8 @@ meter {
   .orchestration-board,
   .rule-grid,
   .agent-rules,
-  .graph-step-grid {
+  .graph-step-grid,
+  .master-candidates {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2685,6 +2849,9 @@ meter {
   .collab-box,
   .triple-list div,
   .candidate-triples div,
+  .tool-chain article,
+  .operation-log article,
+  .master-candidates,
   .mini-topology div,
   .decision-table > div {
     grid-template-columns: 1fr;
@@ -2703,8 +2870,8 @@ meter {
   }
 
   .data-table > div {
-    grid-template-columns: repeat(6, minmax(120px, 1fr));
-    min-width: 720px;
+    grid-template-columns: repeat(7, minmax(120px, 1fr));
+    min-width: 840px;
   }
 
   .merged-output p,
