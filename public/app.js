@@ -11,7 +11,7 @@ const sourceConfigs = [
 
 const layers = ["ODS原始数据层", "AI治理任务池", "DWD标准明细层", "知识卡片库"];
 const statuses = ["已接入", "待AI处理", "AI处理中", "待人工复核", "有问题待补充", "已通过", "可生成知识卡片"];
-const issueTypes = ["缺设备编码", "缺温度值", "缺振动值", "主数据不确定", "描述过于模糊", "术语不标准"];
+const issueTypes = ["缺设备编码", "缺温度值", "缺振动值", "缺关键字段", "主数据不确定", "描述过于模糊", "术语不标准"];
 const structures = ["结构化数据", "半结构化数据", "非结构化数据"];
 const systemFields = ["equipment_name", "equipment_code", "system", "component", "fault_symptom", "repair_action", "repair_result", "temperature_value", "vibration_value", "ignore"];
 
@@ -88,6 +88,7 @@ const defaultFilters = {
 };
 
 const defaultState = {
+  page: "dashboard",
   selectedRecordId: "REC-001",
   drawerOpen: false,
   helpPanel: "",
@@ -489,7 +490,8 @@ function filteredTasks() {
     if (f.sourceSystem !== "全部" && task.sourceSystem !== f.sourceSystem) return false;
     if (f.currentStatus !== "全部" && task.currentStatus !== f.currentStatus) return false;
     if (f.currentLayer !== "全部" && task.currentLayer !== f.currentLayer) return false;
-    if (f.issueType !== "全部" && !task.issueList.includes(f.issueType)) return false;
+    if (f.issueType === "缺关键字段" && !task.issueList.some((issue) => ["缺设备编码", "缺温度值", "缺振动值"].includes(issue))) return false;
+    if (!["全部", "缺关键字段"].includes(f.issueType) && !task.issueList.includes(f.issueType)) return false;
     if (f.needsReview !== "全部" && (task.needsReview ? "是" : "否") !== f.needsReview) return false;
     if (f.dataStructure !== "全部" && task.dataStructure !== f.dataStructure) return false;
     if (f.confidence === ">=85" && task.confidence < 85) return false;
@@ -511,6 +513,110 @@ function metrics() {
     ["可生成知识卡片数量", tasks.filter((task) => task.currentStatus === "可生成知识卡片").length],
     ["已进入RAG准备区数量", tasks.filter((task) => task.ragReady).length]
   ];
+}
+
+function dashboardStats() {
+  const tasks = allRecords().map(taskView);
+  const completedAi = tasks.filter((task) => task.completedSteps.includes("route") || ["待人工复核", "有问题待补充", "已通过", "可生成知识卡片"].includes(task.currentStatus));
+  const autoPassed = tasks.filter((task) => task.currentStatus === "已通过" && !task.needsReview);
+  const humanPassed = tasks.filter((task) => task.currentStatus === "已通过" && task.needsReview);
+  const dwd = tasks.filter((task) => task.currentLayer === "DWD标准明细层");
+  const knowledge = tasks.filter((task) => task.currentStatus === "可生成知识卡片" || task.currentLayer === "知识卡片库");
+  const ragReady = tasks.filter((task) => task.ragReady);
+  return [
+    ["今日已接入数据量", tasks.length],
+    ["已完成 AI 处理数量", completedAi.length],
+    ["已自动通过数量", autoPassed.length],
+    ["已人工复核通过数量", humanPassed.length],
+    ["已进入 DWD 标准层数量", dwd.length],
+    ["已生成知识卡片数量", knowledge.length],
+    ["已进入 RAG 准备区数量", ragReady.length],
+    ["自动处理通过率", completedAi.length ? `${Math.round((autoPassed.length / completedAi.length) * 100)}%` : "0%"]
+  ];
+}
+
+function todoItems() {
+  const tasks = allRecords().map(taskView);
+  return [
+    ["待 AI 处理", tasks.filter((task) => task.currentStatus === "待AI处理").length, "status:待AI处理", "等待进入AI治理任务池的数据。"],
+    ["AI 处理中", tasks.filter((task) => task.currentStatus === "AI处理中").length, "status:AI处理中", "正在执行结构识别、规则处理或模型抽取的数据。"],
+    ["待人工复核", tasks.filter((task) => task.currentStatus === "待人工复核").length, "status:待人工复核", "AI无法完全确定，需要业务人员确认的数据。"],
+    ["有问题待补充", tasks.filter((task) => task.currentStatus === "有问题待补充").length, "status:有问题待补充", "描述过于模糊或关键字段缺失的数据。"],
+    ["主数据不确定", tasks.filter((task) => task.issueList.includes("主数据不确定")).length, "issue:主数据不确定", "设备候选无法唯一确认的数据。"],
+    ["缺关键字段", tasks.filter((task) => task.issueList.some((issue) => ["缺设备编码", "缺温度值", "缺振动值"].includes(issue))).length, "issue:缺关键字段", "缺设备编码、温度值或振动值的数据。"],
+    ["可生成知识卡片但未生成", tasks.filter((task) => task.currentStatus === "已通过").length, "status:已通过", "已进入DWD标准层但尚未沉淀知识卡片的数据。"]
+  ];
+}
+
+function dashboardMetricItems() {
+  return dashboardStats().map(([label, value]) => {
+    const actionMap = {
+      "今日已接入数据量": "all:全部",
+      "已完成 AI 处理数量": "processed:全部",
+      "已自动通过数量": "status:已通过",
+      "已人工复核通过数量": "status:已通过",
+      "已进入 DWD 标准层数量": "layer:DWD标准明细层",
+      "已生成知识卡片数量": "status:可生成知识卡片",
+      "已进入 RAG 准备区数量": "status:可生成知识卡片",
+      "自动处理通过率": "status:已通过"
+    };
+    return [label, value, actionMap[label] || "all:全部"];
+  });
+}
+
+function sourceBreakdown() {
+  return sourceConfigs.map((source) => {
+    const tasks = allRecords().map(taskView).filter((task) => task.sourceSystem === source.system);
+    const processed = tasks.filter((task) => ["待人工复核", "有问题待补充", "已通过", "可生成知识卡片"].includes(task.currentStatus) || task.completedSteps.includes("route"));
+    const autoPassed = tasks.filter((task) => task.currentStatus === "已通过" && !task.needsReview);
+    const humanPassed = tasks.filter((task) => task.currentStatus === "已通过" && task.needsReview);
+    const abnormal = tasks.filter((task) => task.currentStatus === "有问题待补充" || task.issueList.length > 0);
+    const knowledge = tasks.filter((task) => task.currentStatus === "可生成知识卡片" || task.ragReady);
+    const success = tasks.length ? Math.round(((autoPassed.length + humanPassed.length + knowledge.length) / tasks.length) * 100) : 0;
+    const times = tasks.map((task) => task.ingestTime).sort();
+    return {
+      ...source,
+      total: tasks.length,
+      processed: processed.length,
+      autoPassed: autoPassed.length,
+      humanPassed: humanPassed.length,
+      abnormal: abnormal.length,
+      knowledge: knowledge.length,
+      success,
+      recent: times[times.length - 1] || "-"
+    };
+  });
+}
+
+function issueDistribution() {
+  const tasks = allRecords().map(taskView);
+  const defs = [
+    ["缺设备编码", (task) => task.issueList.includes("缺设备编码"), "issue:缺设备编码"],
+    ["主数据不确定", (task) => task.issueList.includes("主数据不确定"), "issue:主数据不确定"],
+    ["缺温度值/振动值", (task) => task.issueList.includes("缺温度值") || task.issueList.includes("缺振动值"), "issue:缺关键字段"],
+    ["描述过于模糊", (task) => task.issueList.includes("描述过于模糊"), "issue:描述过于模糊"],
+    ["术语不标准", (task) => task.issueList.includes("术语不标准"), "issue:术语不标准"],
+    ["疑似重复", (task) => task.raw.includes("重复") || task.sourceId.includes("DUP"), "issue:疑似重复"],
+    ["处理结果缺失", (task) => !task.finalData.repair_result, "issue:处理结果缺失"]
+  ];
+  return defs.map(([label, predicate, action]) => [label, tasks.filter(predicate).length, action]);
+}
+
+function recentProcessedRecords() {
+  return allRecords()
+    .map(taskView)
+    .filter((task) => ["已通过", "可生成知识卡片", "有问题待补充"].includes(task.currentStatus))
+    .sort((a, b) => String(b.ingestTime).localeCompare(String(a.ingestTime)))
+    .slice(0, 8);
+}
+
+function passMethod(task) {
+  if (task.currentStatus === "有问题待补充") return "不入库";
+  if (task.needsReview && task.currentStatus === "已通过") return "人工复核通过";
+  if (task.dataStructure === "结构化数据" && task.currentStatus === "已通过") return "规则校验通过";
+  if (task.currentStatus === "已通过") return "AI自动通过";
+  if (task.currentStatus === "可生成知识卡片") return task.needsReview ? "人工复核通过" : "AI自动通过";
+  return "-";
 }
 
 function addHistory(recordId, status, detail) {
@@ -645,6 +751,37 @@ function generateKnowledge(recordId) {
   runtime.ragReady = true;
   addHistory(recordId, "可生成知识卡片", "DWD标准数据生成知识卡片，进入RAG准备区");
   addLog("生成知识卡片", recordId);
+  saveState();
+  render();
+}
+
+function openWorkbenchTodo(action) {
+  const [type, value] = action.split(":");
+  state.page = "workbench";
+  state.drawerOpen = false;
+  state.helpPanel = "";
+  state.filters = { ...defaultFilters };
+  if (type === "all") {
+    addLog("从驾驶舱进入工作台：全部数据");
+    saveState();
+    render();
+    return;
+  }
+  if (type === "status") state.filters.currentStatus = value;
+  if (type === "issue") state.filters.issueType = value;
+  if (type === "layer") state.filters.currentLayer = value;
+  if (type === "source") state.filters.sourceSystem = value;
+  if (type === "processed") state.filters.currentStatus = "全部";
+  addLog(`从驾驶舱进入工作台：${value}`);
+  saveState();
+  render();
+}
+
+function openDashboardDetail(recordId) {
+  state.selectedRecordId = recordId;
+  state.drawerOpen = true;
+  state.helpPanel = "";
+  addLog(`从驾驶舱打开记录详情：${recordId}`, recordId);
   saveState();
   render();
 }
@@ -827,8 +964,16 @@ function confirmCsvMapping() {
 }
 
 function render() {
-  pageTitle.textContent = "船舶 AI 数据治理实验台";
-  nav.querySelectorAll("button").forEach((button) => button.classList.toggle("active", button.dataset.page === "workbench"));
+  pageTitle.textContent = state.page === "dashboard" ? "治理驾驶舱" : "船舶 AI 数据治理实验台";
+  nav.querySelectorAll("button").forEach((button) => button.classList.toggle("active", button.dataset.page === state.page));
+  if (state.page === "dashboard") {
+    pageContent.innerHTML = `
+      ${renderDashboard()}
+      ${state.drawerOpen ? renderDrawer(taskView(selectedRecord())) : ""}
+    `;
+    saveState();
+    return;
+  }
   pageContent.innerHTML = `
     <section class="enterprise-page">
       ${renderHero()}
@@ -841,6 +986,129 @@ function render() {
     </section>
   `;
   saveState();
+}
+
+function renderDashboard() {
+  return `
+    <section class="dashboard-page">
+      <div class="enterprise-hero panel">
+        <div>
+          <p class="eyebrow">Governance Dashboard</p>
+          <h2>治理驾驶舱</h2>
+          <p class="dashboard-desc">用于查看船舶多来源数据治理进展、已处理成果和当前待办任务。</p>
+        </div>
+      </div>
+      <article class="panel enterprise-card">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">Processed Overview</p><h2>已处理成果总览</h2></div>
+          <span class="status-pill">成果汇总</span>
+        </div>
+        <div class="dashboard-metric-grid">
+          ${dashboardMetricItems().map(([label, value, action]) => `
+            <article data-dashboard-drill="${action}">
+              <span>${label}</span>
+              <strong>${value}</strong>
+              <em>查看明细</em>
+            </article>
+          `).join("")}
+        </div>
+      </article>
+      <article class="panel enterprise-card">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">Source Breakdown</p><h2>来源系统处理情况</h2></div>
+          <span class="status-pill">按来源拆解</span>
+        </div>
+        <div class="dashboard-table-wrap">
+          <table class="enterprise-table dashboard-source-table">
+            <thead>
+              <tr>
+                <th>来源系统</th><th>数据类型</th><th>今日接入量</th><th>已处理数量</th><th>自动通过数量</th><th>人工复核通过数量</th><th>异常/待补充数量</th><th>已生成知识卡片数量</th><th>处理成功率</th><th>最近同步时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sourceBreakdown().map((source) => `
+                <tr>
+                  <td><strong>${source.system}</strong></td>
+                  <td>${source.type}</td>
+                  <td>${source.total}</td>
+                  <td>${source.processed}</td>
+                  <td>${source.autoPassed}</td>
+                  <td>${source.humanPassed}</td>
+                  <td>${source.abnormal}</td>
+                  <td>${source.knowledge}</td>
+                  <td>${source.success}%</td>
+                  <td>${source.recent}</td>
+                  <td><button class="table-link-btn" data-dashboard-source="${source.system}" type="button">查看明细</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </article>
+      <article class="panel enterprise-card">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">Issue Distribution</p><h2>异常/待补充问题分布</h2></div>
+          <span class="status-pill">点击下钻</span>
+        </div>
+        <div class="issue-distribution-grid">
+          ${issueDistribution().map(([label, count, action]) => `
+            <button data-dashboard-issue="${action}" type="button">
+              <span>${label}</span>
+              <strong>${count}</strong>
+              <em>查看问题数据</em>
+            </button>
+          `).join("")}
+        </div>
+      </article>
+      <article class="panel enterprise-card">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">Recent Processed Records</p><h2>最近已处理记录</h2></div>
+          <span class="status-pill">${recentProcessedRecords().length} 条</span>
+        </div>
+        <div class="dashboard-table-wrap">
+          <table class="enterprise-table dashboard-recent-table">
+            <thead>
+              <tr>
+                <th>记录ID</th><th>来源系统</th><th>来源单号</th><th>原始摘要</th><th>处理结果</th><th>通过方式</th><th>当前层级</th><th>是否生成知识卡片</th><th>处理时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recentProcessedRecords().map((task) => `
+                <tr>
+                  <td><strong>${task.id}</strong></td>
+                  <td>${task.sourceSystem}</td>
+                  <td>${task.sourceId}</td>
+                  <td class="summary-cell">${task.raw}</td>
+                  <td><span class="state-badge ${badgeClass(task.currentStatus)}">${task.currentStatus === "有问题待补充" ? "待补充" : task.currentStatus}</span></td>
+                  <td>${passMethod(task)}</td>
+                  <td>${destination(task)}</td>
+                  <td>${task.currentStatus === "可生成知识卡片" || task.ragReady ? "是" : "否"}</td>
+                  <td>${task.history?.[0]?.time || task.ingestTime}</td>
+                  <td><button class="table-link-btn" data-dashboard-detail="${task.id}" type="button">查看详情</button></td>
+                </tr>
+              `).join("") || `<tr><td colspan="10" class="empty-row">暂无已处理记录。</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </article>
+      <article class="panel enterprise-card">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">Todo Center</p><h2>待办中心</h2></div>
+          <span class="status-pill">点击进入工作台</span>
+        </div>
+        <div class="todo-grid">
+          ${todoItems().map(([label, count, action, desc]) => `
+            <button data-dashboard-todo="${action}" type="button">
+              <span>${label}</span>
+              <strong>${count}</strong>
+              <p>${desc}</p>
+              <em>查看任务</em>
+            </button>
+          `).join("")}
+        </div>
+      </article>
+    </section>
+  `;
 }
 
 function renderHero() {
@@ -1314,6 +1582,21 @@ function badgeClass(value) {
 }
 
 document.addEventListener("click", (event) => {
+  const dashboardDrill = event.target.closest("[data-dashboard-drill]");
+  if (dashboardDrill) return openWorkbenchTodo(dashboardDrill.dataset.dashboardDrill);
+
+  const dashboardTodo = event.target.closest("[data-dashboard-todo]");
+  if (dashboardTodo) return openWorkbenchTodo(dashboardTodo.dataset.dashboardTodo);
+
+  const dashboardSource = event.target.closest("[data-dashboard-source]");
+  if (dashboardSource) return openWorkbenchTodo(`source:${dashboardSource.dataset.dashboardSource}`);
+
+  const dashboardIssue = event.target.closest("[data-dashboard-issue]");
+  if (dashboardIssue) return openWorkbenchTodo(dashboardIssue.dataset.dashboardIssue);
+
+  const dashboardDetail = event.target.closest("[data-dashboard-detail]");
+  if (dashboardDetail) return openDashboardDetail(dashboardDetail.dataset.dashboardDetail);
+
   const open = event.target.closest("[data-open], [data-review-open]");
   if (open) {
     state.selectedRecordId = open.dataset.open || open.dataset.reviewOpen;
@@ -1362,7 +1645,10 @@ document.addEventListener("click", (event) => {
   }
   const navButton = event.target.closest("[data-page]");
   if (navButton) {
-    nav.querySelectorAll("button").forEach((button) => button.classList.toggle("active", button === navButton));
+    state.page = navButton.dataset.page === "dashboard" ? "dashboard" : "workbench";
+    state.drawerOpen = false;
+    state.helpPanel = "";
+    saveState();
     render();
   }
 });
