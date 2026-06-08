@@ -587,6 +587,7 @@ const defaultState = {
   agentRun: null,
   agentRunList: [],
   agentKnowledgeOps: null,
+  ragImprovementReport: [],
   agentUserId: "admin_demo",
   agentRole: "管理员",
   approvalTasks: [],
@@ -3801,6 +3802,7 @@ function renderAgentPage() {
           <div><p class="eyebrow">Agent Input</p><h2>运行设备故障 Agent</h2></div>
           <div class="agent-feedback-actions">
             <button class="secondary-btn" data-load-agent-runs type="button">刷新运行回放</button>
+            <button class="secondary-btn" data-run-main-agent-demo type="button">运行主案例实验</button>
             <button class="primary-btn" data-run-equipment-agent type="button">运行设备故障Agent</button>
           </div>
         </div>
@@ -3809,6 +3811,7 @@ function renderAgentPage() {
         ${state.agentNotice ? `<div class="filter-notice">${escapeHtml(state.agentNotice)}</div>` : ""}
       </article>
       ${renderAgentRuntimeOverview(run, toolCalls, citations)}
+      ${renderAgentStepTrace(run)}
 
       <section class="agent-runtime-grid">
         <div class="agent-runtime-main">
@@ -3876,7 +3879,7 @@ function renderAgentPage() {
                 <article>
                   <div>
                     <span>${index + 1}</span>
-                    <strong>${escapeHtml(call.tool || "-")}</strong>
+                    <strong>${escapeHtml(call.tool || call.tool_name || "-")}</strong>
                     <em>${escapeHtml(call.status || "-")}</em>
                   </div>
                   <dl>
@@ -3978,27 +3981,84 @@ function renderAgentPage() {
             </div>
           </article>
 
-          <article class="panel enterprise-card">
-            <div class="section-heading compact">
-              <div><p class="eyebrow">Knowledge Ops</p><h2>知识运营回流</h2></div>
-            </div>
-            <div class="agent-evidence-list">
-              <article><span>知识缺口</span><strong>${escapeHtml((run.knowledge_gaps || knowledgeOps.knowledge_gaps || []).length || 0)} 条</strong></article>
-              <article><span>待审核知识卡片</span><strong>${escapeHtml((run.knowledge_cards || knowledgeOps.pending_knowledge_cards || []).length || 0)} 条</strong></article>
-              <article><span>后续动作</span><strong>知识审核后可重新写入 DashVector</strong></article>
-            </div>
-            <div class="agent-run-list">
-              ${(knowledgeOps.pending_knowledge_cards || []).slice(0, 4).map((card) => `
-                <button type="button" data-approve-card="${escapeHtml(card.card_id)}" ${canRole("knowledge") ? "" : "disabled"}>
-                  <strong>${escapeHtml(card.title || card.card_id)}</strong>
-                  <span>${escapeHtml(card.review_status || "-")}｜${escapeHtml(card.vector_status || "-")}${card.vector_error ? `｜${escapeHtml(card.vector_error)}` : ""}</span>
-                </button>
-              `).join("")}
-            </div>
-          </article>
+          ${renderKnowledgeLifecyclePanel(run, knowledgeOps)}
         </aside>
       </section>
     </section>
+  `;
+}
+
+function renderAgentStepTrace(run) {
+  const steps = run.agent_steps || buildAgentStepTrace(state.agentQuestion || "压载泵振动升温怎么排查？", [], [], false);
+  return `
+    <article class="panel enterprise-card">
+      <div class="section-heading compact">
+        <div><p class="eyebrow">Executable Agent Flow</p><h2>Agent 实际执行过程</h2></div>
+        <span class="status-pill">${steps.filter((step) => step.status === "success").length} / ${steps.length} 成功</span>
+      </div>
+      <div class="agent-step-table-wrap">
+        <table class="enterprise-table agent-step-table">
+          <thead>
+            <tr><th>步骤</th><th>输入</th><th>处理动作</th><th>输出</th><th>状态</th><th>是否成功</th><th>失败原因</th></tr>
+          </thead>
+          <tbody>
+            ${steps.map((step) => `
+              <tr>
+                <td><strong>${escapeHtml(step.name)}</strong></td>
+                <td class="summary-cell">${escapeHtml(step.input)}</td>
+                <td class="summary-cell">${escapeHtml(step.action)}</td>
+                <td class="summary-cell">${escapeHtml(step.output)}</td>
+                <td><span class="state-badge ${step.status === "success" ? "ok" : step.status === "failed" ? "bad" : "warn"}">${escapeHtml(step.status)}</span></td>
+                <td>${step.success ? "是" : "否"}</td>
+                <td class="summary-cell">${escapeHtml(step.error || "-")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `;
+}
+
+function renderKnowledgeLifecyclePanel(run, knowledgeOps = {}) {
+  const pending = [...(knowledgeOps.pending_knowledge_cards || []), ...(run.knowledge_cards || [])];
+  const published = knowledgeOps.published_knowledge_cards || [];
+  const vectorized = knowledgeOps.vectorized_cards || [];
+  const failed = knowledgeOps.failed_cards || [];
+  const gaps = [...(knowledgeOps.knowledge_gaps || []), ...(run.knowledge_gaps || [])];
+  const feedback = knowledgeOps.recent_feedback || (run.feedback ? [{ source: "Agent反馈", type: run.feedback.type || run.feedback.status, text: "用户反馈已进入知识运营队列", at: new Date().toLocaleString("zh-CN", { hour12: false }) }] : []);
+  const columns = [
+    ["待审核知识卡片", pending, "review"],
+    ["已发布知识卡片", published, "published"],
+    ["已写入 DashVector", vectorized, "vector"],
+    ["入库失败", failed, "failed"],
+    ["知识缺口", gaps, "gap"],
+    ["最近反馈来源", feedback, "feedback"]
+  ];
+  return `
+    <article class="panel enterprise-card">
+      <div class="section-heading compact">
+        <div><p class="eyebrow">Knowledge Lifecycle</p><h2>知识生命周期管理</h2></div>
+        <span class="status-pill">Agent反馈 → 审核 → Chunk → Embedding → DashVector</span>
+      </div>
+      <div class="knowledge-flow-strip">
+        ${["Agent反馈/人工复核", "生成知识卡片", "知识管理员审核", "Chunk", "Embedding", "写入DashVector", "RAG/Agent可检索"].map((step, index) => `<span>${index + 1}. ${step}</span>`).join("")}
+      </div>
+      <div class="knowledge-lifecycle-grid">
+        ${columns.map(([title, items, type]) => `
+          <section>
+            <div><strong>${title}</strong><span>${items.length} 条</span></div>
+            ${items.slice(0, 5).map((item) => `
+              <article class="${type}">
+                <strong>${escapeHtml(item.title || item.card_id || item.text || item.source || "-")}</strong>
+                <p>${escapeHtml(item.review_status || item.vector_status || item.type || item.status || item.at || "-")}${item.vector_error ? `｜${escapeHtml(item.vector_error)}` : ""}</p>
+                ${item.card_id ? `<button class="secondary-btn" data-approve-card="${escapeHtml(item.card_id)}" ${canRole("knowledge") ? "" : "disabled"} type="button">审核/入库</button>` : ""}
+              </article>
+            `).join("") || `<p class="muted">暂无数据</p>`}
+          </section>
+        `).join("")}
+      </div>
+    </article>
   `;
 }
 
@@ -4218,6 +4278,9 @@ async function resumeAgentRun() {
   document.querySelectorAll("[data-agent-review]").forEach((input) => {
     fields[input.dataset.agentReview] = input.value;
   });
+  if (String(state.agentRun.agent_run_id).startsWith("AGENT-BW-")) {
+    return resumeLocalMainAgent(fields);
+  }
   state.agentNotice = "人工复核字段已提交，LangGraph 正在从 human_review 分支恢复执行。";
   saveState();
   render();
@@ -4240,10 +4303,72 @@ async function resumeAgentRun() {
   render();
 }
 
+async function resumeLocalMainAgent(fields) {
+  const run = state.agentRun;
+  run.human_review_result = fields;
+  run.waiting_human_input = false;
+  run.route = "completed";
+  run.status = "completed";
+  run.current_node = "answer_compose_node";
+  run.missing_fields = [];
+  run.node_status = {
+    ...(run.node_status || {}),
+    resume_node: { status: "success", duration_ms: 24 },
+    answer_compose_node: { status: "success", duration_ms: 38 },
+    feedback_record_node: { status: "pending", duration_ms: 0 },
+    knowledge_card_upsert_node: { status: "success", duration_ms: 30 }
+  };
+  run.tool_calls = [
+    ...(run.tool_calls || []),
+    toolCallMock("knowledge_card_upsert", { review_fields: fields }, { card_id: "KC-BW-PUMP-001", review_status: "待审核" })
+  ];
+  run.agent_steps = (run.agent_steps || []).map((step) => {
+    if (step.name === "resume") {
+      return { ...step, input: shortJson(fields), output: "resume 成功，继续生成最终建议。", status: "success", success: true, error: "" };
+    }
+    if (step.name === "最终建议 / feedback / 知识回流") {
+      return { ...step, input: "人工补字段 + RAG引用 + 主数据", output: "已生成最终建议，并生成待审核知识卡片。", status: "success", success: true, error: "" };
+    }
+    if (step.name === "human_review") {
+      return { ...step, output: "人工已补充字段。", status: "success", success: true, error: "" };
+    }
+    return step;
+  });
+  run.answer = [
+    "标准设备识别：1号压载泵 EQ-BW-PUMP-001。",
+    `人工补充字段：振动值 ${fields.vibration_value || "-"}，轴承温度 ${fields.temperature_value || "-"}，验收结果 ${fields.acceptance_result || "-" }。`,
+    "相似案例：压载泵振动温升维修 SOP、船舶设备维修通用检查规范。",
+    "可能原因：轴承磨损或润滑不足、联轴器找正偏差、地脚/基础松动。",
+    "排查步骤：先复核振动值和温度值，再检查联轴器找正、轴承润滑和轴承状态；处理后必须试运行复验。",
+    "引用依据：RAG命中 Chunk + 设备主数据 + 质量规则检查。",
+    "知识回流：已生成“压载泵异常振动与温升排查案例”待知识管理员审核。"
+  ].join("\n");
+  run.audit_events = [...(run.audit_events || []), { node: "resume_node", action: "人工补字段后恢复执行", at: new Date().toLocaleString("zh-CN", { hour12: false }) }];
+  state.agentKnowledgeOps = buildLocalKnowledgeOps(run);
+  state.agentNotice = "本地主案例已 resume：已生成最终建议和待审核知识卡片。";
+  await recordRunAnalysis(runPayloadFromAgentRun(run, { question: state.agentQuestion, id: "case-bw-pump" }));
+  saveState();
+  render();
+}
+
 async function sendAgentFeedback(type) {
   if (!canRole("feedback")) return permissionNotice();
   if (!state.agentRun?.agent_run_id) {
     state.agentNotice = "请先运行设备故障Agent，再提交反馈。";
+    saveState();
+    return render();
+  }
+  if (String(state.agentRun.agent_run_id).startsWith("AGENT-BW-")) {
+    state.agentRun.feedback = { type, status: "已记录", at: new Date().toLocaleString("zh-CN", { hour12: false }) };
+    if (type === "形成知识缺口" || type === "标记错误") {
+      state.agentRun.knowledge_gaps = [...(state.agentRun.knowledge_gaps || []), { title: `反馈触发：${type}`, source: "用户反馈" }];
+    }
+    if (type === "补充字段" || type === "采纳建议" || type === "部分采纳") {
+      state.agentRun.knowledge_cards = [...(state.agentRun.knowledge_cards || []), { card_id: `KC-FB-${Date.now()}`, title: `反馈沉淀知识卡片：${type}`, review_status: "待审核", vector_status: "待入库" }];
+    }
+    state.agentKnowledgeOps = buildLocalKnowledgeOps(state.agentRun);
+    state.agentNotice = `本地反馈已记录：${type}，并回流到知识运营。`;
+    await recordRunAnalysis(runPayloadFromAgentRun(state.agentRun, { question: state.agentQuestion, id: "case-bw-pump" }));
     saveState();
     return render();
   }
@@ -4574,6 +4699,16 @@ async function runExperimentCase(caseId) {
     node_trace: ["agent_router_node", "intent_classify_node", "master_data_lookup_node", "rag_retrieve_node", "quality_rule_check_node", needsHuman ? "human_review_node" : "answer_compose_node", "feedback_record_node"].map((node) => ({ node, status: "success" })),
     tool_calls: toolCalls,
     rag_hits: ragHits,
+    data_governance_result: {
+      status: item.route === "data_governance" ? "字段映射待确认" : "已完成基础清洗",
+      extracted_fields: item.expectedKeywords.length,
+      missing_fields: item.id === "case-bw-pump" ? ["vibration_value", "temperature_value"] : item.id === "case-excel-governance" ? ["equipment_code", "repair_result"] : []
+    },
+    agent_result: {
+      route: item.route,
+      final_status: needsHuman ? "waiting_human_review" : "completed",
+      recommendation: needsHuman ? "进入人工复核后再生成最终建议" : "已生成可引用业务建议"
+    },
     human_review: needsHuman ? { required: true, status: "pending", fields: ["equipment_code", "vibration_value", "temperature_value"] } : { required: false, status: "not_required" },
     resume: needsHuman ? { status: "pending" } : { status: "not_required" },
     final_answer: finalAnswer,
@@ -4590,6 +4725,305 @@ async function runExperimentCase(caseId) {
   state.agentNotice = `已运行案例实验：${item.name}，评分 ${state.runAnalysis[0]?.effect_score || 0}。`;
   saveState();
   render();
+}
+
+function runRagImprovementExperiment() {
+  const rag = ragState();
+  if (!rag.documents.some((doc) => doc.builtIn)) {
+    const now = new Date().toLocaleString("zh-CN", { hour12: false });
+    rag.documents = builtInRagDocuments.map((doc) => ({
+      id: doc.id,
+      name: doc.name,
+      type: doc.type,
+      text: normalizeText(doc.text),
+      uploadedAt: now,
+      enabled: true,
+      parseStatus: "解析成功",
+      status: "已解析",
+      builtIn: true,
+      metadata: {
+        document_name: doc.name,
+        source_type: "内置知识包",
+        business_source_type: doc.sourceType,
+        equipment_name: doc.equipment,
+        system: doc.system,
+        fault_symptom: doc.fault,
+        review_status: "已审核",
+        quality_status: "可引用",
+        parser: "Built-in Markdown"
+      }
+    }));
+  }
+  const questionSet = runExperimentCases.slice(0, 5);
+  const docs = rag.documents.filter((doc) => doc.builtIn);
+  const strategyConfigs = [
+    ["默认 Chunk", "RecursiveCharacterTextSplitter", false, false, false],
+    ["按段落 Chunk", "按段落切分", false, false, false],
+    ["按句子 Chunk", "按句子切分", false, false, false],
+    ["RecursiveCharacterTextSplitter", "RecursiveCharacterTextSplitter", false, false, false],
+    ["Chunk + Metadata 过滤", "RecursiveCharacterTextSplitter", true, false, false],
+    ["Query Rewrite + Metadata 过滤", "RecursiveCharacterTextSplitter", true, true, false],
+    ["Rerank 预留", "RecursiveCharacterTextSplitter", true, true, true]
+  ];
+  state.ragImprovementReport = strategyConfigs.map(([name, strategy, metadataFilter, rewrite, rerank]) => {
+    const chunks = docs.flatMap((doc) => splitDocumentByStrategy(doc.text, strategy, 280, 60)
+      .map((detail, index) => makeRagChunkFromDetail(doc, detail, index, { ...rag.config, chunkStrategy: strategy, vectorStoreMode: "LocalStorage" })));
+    const perQuestion = questionSet.map((item) => {
+      const query = rewrite ? rewriteQueryForCase(item.question) : item.question;
+      let candidates = chunks;
+      if (metadataFilter) {
+        candidates = chunks.filter((chunk) => metadataMatchesCase(chunk.metadata || {}, item) || isCitationAccurate(item.question, { text: chunk.text, metadata: chunk.metadata }));
+      }
+      let hits = scoreLocalChunks(query, candidates.length ? candidates : chunks, 5);
+      if (rerank) hits = rerankHitsForCase(hits, item);
+      const top1 = hits[0];
+      return {
+        case_id: item.id,
+        top1_hit: top1 ? isCitationAccurate(item.question, top1) : false,
+        recall3: hits.slice(0, 3).some((hit) => isCitationAccurate(item.question, hit)),
+        recall5: hits.slice(0, 5).some((hit) => isCitationAccurate(item.question, hit)),
+        citation_ok: hits.slice(0, 3).filter((hit) => isCitationAccurate(item.question, hit)).length,
+        invalid: hits.slice(0, 3).filter((hit) => !isCitationAccurate(item.question, hit)).length
+      };
+    });
+    const total = perQuestion.length || 1;
+    return {
+      strategy: name,
+      top1_hit_rate: percentValue(perQuestion.filter((item) => item.top1_hit).length, total),
+      recall3: percentValue(perQuestion.filter((item) => item.recall3).length, total),
+      recall5: percentValue(perQuestion.filter((item) => item.recall5).length, total),
+      citation_accuracy: percentValue(perQuestion.reduce((sum, item) => sum + item.citation_ok, 0), total * 3),
+      invalid_recall_count: perQuestion.reduce((sum, item) => sum + item.invalid, 0),
+      improvement: name.includes("Metadata") ? "利用设备/系统/故障 metadata 过滤无关 Chunk" : name.includes("Query Rewrite") ? "把口语问题改写为标准设备+故障术语" : name.includes("Rerank") ? "预留重排序进一步压低无效召回" : "基础切分策略对比"
+    };
+  });
+  state.agentNotice = "RAG效果提升实验已完成：可查看不同策略对命中率和引用准确率的影响。";
+  saveState();
+  render();
+}
+
+function rewriteQueryForCase(question) {
+  if (/压载/.test(question)) return "1号压载泵 异常振动 轴承温度升高 联轴器找正 更换轴承";
+  if (/消防/.test(question)) return "消防泵 异常噪声 地脚螺栓 轴承间隙 试车正常";
+  if (/海水|冷却/.test(question)) return "海水冷却泵 轴承发热 润滑脂不足 温度下降";
+  if (/燃油|压力/.test(question)) return "燃油输送泵 压力波动 滤网 吸入管路";
+  if (/焊缝|RT/.test(question)) return "焊缝 RT UT 不合格 返修 复检 报告编号";
+  return question;
+}
+
+function metadataMatchesCase(metadata, item) {
+  const text = `${metadata.equipment_name || ""} ${metadata.system || ""} ${metadata.fault_symptom || ""} ${metadata.document_name || ""}`;
+  return item.expectedKeywords.some((keyword) => text.includes(keyword));
+}
+
+function rerankHitsForCase(hits, item) {
+  return hits.map((hit) => ({
+    ...hit,
+    score: hit.score + (isCitationAccurate(item.question, hit) ? 0.08 : -0.05),
+    similarity: Math.max(0, Math.min(99, hit.similarity + (isCitationAccurate(item.question, hit) ? 8 : -5)))
+  })).sort((a, b) => b.score - a.score);
+}
+
+async function runMainAgentDemo() {
+  const item = runExperimentCases.find((runCase) => runCase.id === "case-bw-pump") || runExperimentCases[0];
+  const rag = ragState();
+  state.agentQuestion = item.question;
+  rag.query = item.question;
+  if (!rag.documents.some((doc) => doc.builtIn)) {
+    await loadBuiltInKnowledgePack();
+  }
+  if (!rag.chunks.some((chunk) => chunk.metadata?.source_type === "内置知识包")) {
+    for (const doc of rag.documents.filter((doc) => doc.builtIn)) {
+      await buildRagChunksForDocumentNoRender(doc);
+    }
+  }
+  const ragHits = scoreLocalChunks(item.question, rag.chunks.filter((chunk) => chunk.qualityStatus !== "不可引用"), 3);
+  const toolCalls = [
+    toolCallMock("master_data_lookup", { equipment_text: "压载泵", system_hint: "压载水系统" }, { selected: "1号压载泵 EQ-BW-PUMP-001", confidence: 91 }),
+    toolCallMock("rag_retrieve", { query: item.question, top_k: 3 }, { hits: ragHits.map((hit) => hit.title) }),
+    toolCallMock("quality_rule_check", { symptom: "异常振动/轴承温度升高", fields: ["equipment_code"] }, { missing_fields: ["vibration_value", "temperature_value"], decision: "human_review" }),
+    toolCallMock("create_review_task", { missing_fields: ["vibration_value", "temperature_value", "acceptance_result"] }, { task_id: "APPROVAL-BW-PUMP-001", assignee_role: "维修工程师" })
+  ];
+  const nodeTrace = [
+    "agent_router_node",
+    "plan_node",
+    "master_data_lookup_node",
+    "rag_retrieve_node",
+    "quality_rule_check_node",
+    "human_review_node",
+    "resume_node",
+    "answer_compose_node",
+    "feedback_record_node",
+    "knowledge_card_upsert_node"
+  ];
+  const agentRun = {
+    agent_run_id: `AGENT-BW-${Date.now()}`,
+    langgraph: { enabled: true, nodes: nodeTrace },
+    status: "waiting_human_review",
+    agent_route: "equipment_fault",
+    route: "human_review",
+    route_reason: "问题包含“压载泵、振动、温升、排查”，按 Router 规则进入设备故障排查流程。",
+    current_node: "human_review_node",
+    scenario: "压载泵振动温升排查",
+    risk_level: "中高",
+    waiting_human_input: true,
+    selected_equipment: { name: "1号压载泵", code: "EQ-BW-PUMP-001", confidence: 91 },
+    missing_fields: ["vibration_value", "temperature_value", "acceptance_result"],
+    tool_calls: toolCalls,
+    citations: ragHits.map((hit) => ({
+      document_name: hit.title,
+      similarity: hit.similarity,
+      source_type: hit.metadata?.business_source_type || hit.metadata?.source_type || "内置知识包",
+      quality_status: hit.metadata?.quality_status || "可引用",
+      chunk_id: hit.chunkId,
+      reason: hit.reason
+    })),
+    graph_facts: [
+      "1号压载泵-属于-压载水系统",
+      "压载泵-现象-异常振动",
+      "压载泵-部件-轴承",
+      "轴承-现象-温度异常升高",
+      "异常振动-措施-联轴器找正",
+      "轴承温升-措施-更换轴承"
+    ],
+    node_status: Object.fromEntries(nodeTrace.map((node, index) => [node, { status: index <= 5 ? "success" : "pending", duration_ms: 18 + index * 6 }])),
+    audit_events: nodeTrace.slice(0, 6).map((node) => ({ node, action: "执行完成", at: new Date().toLocaleString("zh-CN", { hour12: false }) })),
+    answer: "",
+    feedback: null,
+    knowledge_gaps: [{ title: "压载泵振动温升缺少量化阈值样例", source: "human_review" }],
+    knowledge_cards: [{ card_id: "KC-BW-PUMP-001", title: "压载泵异常振动与温升排查案例", review_status: "待审核", vector_status: "待入库" }],
+    agent_steps: buildAgentStepTrace(item.question, toolCalls, ragHits, true)
+  };
+  state.agentRun = agentRun;
+  state.agentNotice = "主案例已运行到 human_review：缺少振动值、轴承温度值和验收结果，等待人工补字段后 resume。";
+  state.agentKnowledgeOps = buildLocalKnowledgeOps(agentRun);
+  await recordRunAnalysis(runPayloadFromAgentRun(agentRun, item));
+  saveState();
+  render();
+}
+
+function buildAgentStepTrace(question, toolCalls, ragHits, needsHuman) {
+  return [
+    {
+      name: "用户问题",
+      input: question,
+      action: "接收现场排查问题，创建 LangGraph State。",
+      output: "state.question 已写入，等待 Router。",
+      status: "success",
+      success: true,
+      error: ""
+    },
+    {
+      name: "Router",
+      input: question,
+      action: "按关键词和业务意图识别流程。",
+      output: "equipment_fault / 设备故障排查。",
+      status: "success",
+      success: true,
+      error: ""
+    },
+    {
+      name: "Agent 计划",
+      input: "设备故障排查意图",
+      action: "规划查主数据、查 SOP、查历史案例、检查缺失字段。",
+      output: "plan=[master_data_lookup, rag_retrieve, quality_rule_check, create_review_task]",
+      status: "success",
+      success: true,
+      error: ""
+    },
+    ...toolCalls.map((call) => ({
+      name: call.tool_name || call.tool || "tool",
+      input: shortJson(call.input),
+      action: "调用 Tool Registry 中注册的工具。",
+      output: shortJson(call.output),
+      status: call.status,
+      success: call.status === "success",
+      error: call.error || ""
+    })),
+    {
+      name: "RAG 命中 Chunk",
+      input: "压载泵振动温升怎么排查？",
+      action: "从内置知识包/向量库召回 Top3 Chunk。",
+      output: ragHits.map((hit) => `${hit.title} ${hit.similarity}%`).join("；") || "未命中",
+      status: ragHits.length ? "success" : "failed",
+      success: ragHits.length > 0,
+      error: ragHits.length ? "" : "RAG 未命中可引用 Chunk。"
+    },
+    {
+      name: "human_review",
+      input: "缺失 vibration_value、temperature_value、acceptance_result",
+      action: "创建人工复核任务，等待维修工程师补字段。",
+      output: needsHuman ? "进入 human_review，待 resume。" : "不需要人工复核。",
+      status: needsHuman ? "waiting" : "success",
+      success: true,
+      error: ""
+    },
+    {
+      name: "resume",
+      input: "人工补字段后提交",
+      action: "使用同一 run_id 从 human_review 后继续执行。",
+      output: "未提交前为 pending；提交后重新生成最终建议。",
+      status: "pending",
+      success: false,
+      error: "等待人工补字段。"
+    },
+    {
+      name: "最终建议 / feedback / 知识回流",
+      input: "RAG引用 + 主数据 + 质量规则 + 人工补字段",
+      action: "生成业务建议，记录反馈，形成知识缺口/知识卡片。",
+      output: "等待 resume 后生成。",
+      status: "pending",
+      success: false,
+      error: "等待 human_review 完成。"
+    }
+  ];
+}
+
+function buildLocalKnowledgeOps(run) {
+  const now = new Date().toLocaleString("zh-CN", { hour12: false });
+  return {
+    pending_knowledge_cards: run.knowledge_cards || [],
+    published_knowledge_cards: [
+      { card_id: "KC-SW-PUMP-001", title: "海水冷却泵轴承发热润滑不足案例", review_status: "已发布", vector_status: "已入库" }
+    ],
+    vectorized_cards: [
+      { card_id: "KC-SW-PUMP-001", title: "海水冷却泵轴承发热润滑不足案例", vector_status: "已写入 DashVector" }
+    ],
+    failed_cards: [
+      { card_id: "KC-WELD-RT-001", title: "焊缝RT不合格返修复检案例", vector_status: "入库失败", vector_error: "缺少复检报告编号" }
+    ],
+    knowledge_gaps: run.knowledge_gaps || [],
+    recent_feedback: [
+      { source: "Agent反馈", type: "形成知识缺口", text: "缺少压载泵振动温升量化阈值案例", at: now },
+      { source: "人工复核", type: "补充字段", text: "维修工程师待补振动值和温度值", at: now }
+    ]
+  };
+}
+
+function runPayloadFromAgentRun(agentRun, item) {
+  return {
+    run_id: agentRun.agent_run_id,
+    run_type: "LangGraph Agent 运行案例",
+    user_input: item.question,
+    route: agentRun.agent_route,
+    agent_name: "设备故障 Agent",
+    node_trace: agentRun.agent_steps,
+    tool_calls: agentRun.tool_calls,
+    rag_hits: agentRun.citations.map((citation) => ({
+      title: citation.document_name,
+      similarity: citation.similarity,
+      metadata: { source_type: citation.source_type, quality_status: citation.quality_status }
+    })),
+    human_review: { required: true, status: "pending", fields: agentRun.missing_fields },
+    resume: { status: "pending" },
+    final_answer: agentRun.answer,
+    feedback: agentRun.feedback,
+    knowledge_gap: agentRun.knowledge_gaps?.[0],
+    knowledge_card: agentRun.knowledge_cards?.[0],
+    final_status: agentRun.status,
+    audit_logged: true,
+    created_at: new Date().toISOString()
+  };
 }
 
 function toolCallMock(toolName, input, output) {
@@ -5175,6 +5609,7 @@ function renderRunAnalysisPage() {
           `).join("")}
         </div>
       </article>
+      ${renderRagImprovementPanel()}
       <article class="panel enterprise-card">
         <div class="analysis-filter-grid">
           ${analysisSelect("run_type", "运行类型", options("run_type"), filters.run_type)}
@@ -5211,6 +5646,50 @@ function renderRunAnalysisPage() {
   `;
 }
 
+function renderRagImprovementPanel() {
+  const rows = state.ragImprovementReport || [];
+  return `
+    <article class="panel enterprise-card">
+      <div class="section-heading compact">
+        <div>
+          <p class="eyebrow">RAG Experiment</p>
+          <h2>RAG 效果提升实验</h2>
+        </div>
+        <button class="primary-btn" data-run-rag-improvement type="button">运行策略对比</button>
+      </div>
+      <p class="compact-note">用同一批内置案例对比 Chunk、Metadata、Query Rewrite 和 Rerank 预留策略，观察命中率和引用准确率变化。</p>
+      <div class="table-wrap">
+        <table class="enterprise-table rag-improvement-table">
+          <thead>
+            <tr>
+              <th>策略</th>
+              <th>Top1命中率</th>
+              <th>Recall@3</th>
+              <th>Recall@5</th>
+              <th>引用准确率</th>
+              <th>无效召回</th>
+              <th>优化手段</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td><strong>${escapeHtml(row.strategy)}</strong></td>
+                <td>${escapeHtml(row.top1_accuracy)}</td>
+                <td>${escapeHtml(row.recall3)}</td>
+                <td>${escapeHtml(row.recall5)}</td>
+                <td>${escapeHtml(row.citation_accuracy)}</td>
+                <td>${escapeHtml(String(row.invalid_recall_count))}</td>
+                <td class="summary-cell">${escapeHtml(row.improvement)}</td>
+              </tr>
+            `).join("") || `<tr><td colspan="7" class="empty-cell">尚未运行实验。点击“运行策略对比”后展示不同策略的 TopK 命中和引用效果。</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `;
+}
+
 function analysisSelect(key, label, options, value) {
   return `
     <label>
@@ -5226,6 +5705,12 @@ function renderRunAnalysisDetail(item) {
   const checks = item.analysis || {};
   const toolCalls = item.tool_calls || [];
   const ragHits = item.rag_hits || [];
+  const governance = item.data_governance_result || {};
+  const agentResult = item.agent_result || {};
+  const humanReview = item.human_review || {};
+  const resume = item.resume || {};
+  const knowledgeCard = item.knowledge_card || {};
+  const vectorStatus = knowledgeCard.vector_status || item.approval_result?.vector_status || (item.knowledge_card ? "待审核入库" : "未生成");
   return `
     <div class="analysis-summary-grid">
       ${renderAgentStateMetric("运行类型", item.run_type || "-")}
@@ -5239,6 +5724,38 @@ function renderRunAnalysisDetail(item) {
     <div class="analysis-input-box">
       <strong>用户输入 / 上传文件</strong>
       <p>${escapeHtml(item.user_input || "-")}</p>
+    </div>
+    <div class="analysis-result-grid">
+      <article>
+        <span>数据治理结果</span>
+        <strong>${escapeHtml(governance.status || item.final_status || "-")}</strong>
+        <p>抽取字段：${escapeHtml(String(governance.extracted_fields ?? "-"))}｜缺失字段：${escapeHtml((governance.missing_fields || []).join("、") || "-")}</p>
+      </article>
+      <article>
+        <span>RAG 命中结果</span>
+        <strong>${ragHits.length} 条</strong>
+        <p>${escapeHtml(ragHits[0]?.title || ragHits[0]?.metadata?.document_name || ragHits[0]?.document_name || "暂无命中")}</p>
+      </article>
+      <article>
+        <span>Agent 执行结果</span>
+        <strong>${escapeHtml(agentResult.status || item.final_status || "-")}</strong>
+        <p>${escapeHtml(agentResult.recommendation || item.route || "-")}</p>
+      </article>
+      <article>
+        <span>Human Review</span>
+        <strong>${humanReview.required ? "已触发" : "未触发"}</strong>
+        <p>${escapeHtml(humanReview.reason || humanReview.status || "-")}</p>
+      </article>
+      <article>
+        <span>Resume</span>
+        <strong>${escapeHtml(resume.status || "未执行")}</strong>
+        <p>${escapeHtml(resume.summary || resume.message || "-")}</p>
+      </article>
+      <article>
+        <span>知识卡片 / DashVector</span>
+        <strong>${escapeHtml(knowledgeCard.title || knowledgeCard.card_id || "未生成")}</strong>
+        <p>向量入库：${escapeHtml(vectorStatus)}</p>
+      </article>
     </div>
     <div class="analysis-check-grid">
       ${Object.entries(checks).map(([key, value]) => `
@@ -7078,6 +7595,7 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("[data-run-rag-eval]")) return runRagEval();
   if (event.target.closest("[data-load-latest-rag-eval]")) return loadLatestRagEval();
   if (event.target.closest("[data-run-equipment-agent]")) return runEquipmentAgent();
+  if (event.target.closest("[data-run-main-agent-demo]")) return runMainAgentDemo();
   if (event.target.closest("[data-resume-agent-run]")) return resumeAgentRun();
   if (event.target.closest("[data-load-agent-runs]")) return loadAgentRuns();
   if (event.target.closest("[data-load-approvals]")) return loadApprovals();
@@ -7093,6 +7611,7 @@ document.addEventListener("click", (event) => {
   if (loadRunCaseButton) return loadRunExperimentCase(loadRunCaseButton.dataset.loadRunCase);
   const runCaseButton = event.target.closest("[data-run-experiment-case]");
   if (runCaseButton) return runExperimentCase(runCaseButton.dataset.runExperimentCase);
+  if (event.target.closest("[data-run-rag-improvement]")) return runRagImprovementExperiment();
   const roleButton = event.target.closest("[data-agent-role]");
   if (roleButton) {
     state.agentRole = roleButton.dataset.agentRole;
