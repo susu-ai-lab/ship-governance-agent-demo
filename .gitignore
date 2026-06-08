@@ -1,12 +1,15 @@
 .DS_Store
 .env
 .env.*
+!.env.example
 node_modules/
 data/
 *.traineddata
 *.log
 package.json
 package-lock.json
+!package.json
+!package-lock.json
 server.mjs
 AI作品集主页-可部署版/
 *.jpg

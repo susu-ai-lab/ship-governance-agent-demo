@@ -1,23 +1,144 @@
 # AI辅助数据治理与RAG Agent知识库落地Demo
 
-纯前端静态/半动态演示页面，面向企业后台/数据治理平台风格。Demo 不接真实后端、不接真实大模型，使用 `public/app.js` 内置 mock 数据和 localStorage 跑通“AI辅助数据治理 → 高质量知识库 → RAG检索 → Agent业务应用 → 知识运营反馈”闭环。
+企业后台/数据治理平台风格 Demo。默认使用 `public/app.js` 内置 mock 数据和 localStorage 跑通“AI辅助数据治理 → 高质量知识库 → RAG检索 → Agent业务应用 → 知识运营反馈”闭环。
+
+当前支持两种 RAG 模式：
+
+- `LocalStorage`：本地演示模式，前端生成本地向量并保存在浏览器 localStorage。
+- `Aliyun DashVector`：真实云端向量库模式，通过 Node 后端代理调用阿里云 DashVector 和百炼 Embedding，不在前端暴露 API Key。
 
 ## 本地预览
+
+LocalStorage 静态模式：
 
 ```bash
 cd public
 python3 -m http.server 3005
 ```
 
+Aliyun DashVector 后端代理模式：
+
+```bash
+npm install
+cp .env.example .env
+# 编辑 .env，填入 DashVector 与百炼 Embedding 配置
+npm run dev
+```
+
 访问：
 
 ```text
-http://localhost:3005/
+http://localhost:8787/
 ```
+
+## Aliyun DashVector 配置
+
+后端读取以下环境变量：
+
+```text
+DASHVECTOR_API_KEY=
+DASHVECTOR_ENDPOINT=
+DASHVECTOR_COLLECTION=ship_rag_demo
+DASHSCOPE_API_KEY=
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+EMBEDDING_PROVIDER=aliyun
+EMBEDDING_MODEL=text-embedding-v4
+EMBEDDING_DIMENSION=1024
+```
+
+`text-embedding-v4` 当前按 `EMBEDDING_DIMENSION=1024` 显式请求百炼 Embedding，写入 DashVector 前后端会校验向量长度，确保与 `ship_rag_demo` Collection 的 1024 维配置一致。
+
+前端选择 `Vector Store Mode = Aliyun DashVector` 后，只会调用：
+
+```text
+GET /api/health
+POST /api/rag/init
+POST /api/rag/upsert
+POST /api/rag/query
+POST /api/eval/run
+GET /api/eval/latest
+```
+
+写入 DashVector doc fields 包含：
+
+```text
+chunk_text、document_name、file_type、chunk_index、source_type、review_status、equipment_name、system、fault_symptom、upload_time
+```
+
+如果未配置 `DASHVECTOR_ENDPOINT`、`DASHVECTOR_API_KEY` 或 `DASHSCOPE_API_KEY`，页面会提示“请先配置 DashVector 和百炼 Embedding 环境变量。”
+
+不要在浏览器前端填写真实 API Key；真实密钥只放在 `.env`，由 Express 后端代理调用 DashVector 和百炼 Embedding 服务。
+
+## RAG 评测工作流
+
+后端新增 `src/graphs/ragEvalGraph.js`，使用官方 `@langchain/langgraph` 的 `StateGraph` 管理 RAG 评估 State、Node 和条件分支。`backend/eval` 中的状态和节点函数作为可复用业务节点被真实 LangGraph.js workflow 调用。
+
+评测节点包括：
+
+```text
+load_eval_dataset_node
+document_quality_node
+chunk_quality_node
+metadata_check_node
+retrieval_eval_node
+metrics_node
+answer_eval_node
+root_cause_node
+route_node
+suggestion_node
+```
+
+`POST /api/eval/run` 会运行一次评测流程，评估资料质量、Chunk质量、metadata完整性、TopK检索命中、回答引用可信度、失败归因和优化建议。
+
+## 真实 LangGraph Agent Runtime
+
+后端新增 `src/graphs/equipmentFaultAgentGraph.js`，使用官方 `@langchain/langgraph` 的 `StateGraph` 跑设备故障 Agent。它不是前端静态链路，而是由后端执行真实 State、Node、Tool 调用、条件路由、审计事件和反馈记录。
+
+当前 Agent 节点包括：
+
+```text
+input_node
+intent_classify_node
+master_data_lookup_node
+rag_retrieve_node
+graph_query_node
+quality_check_node
+risk_assess_node
+answer_compose_node
+human_review_route_node
+feedback_record_node
+```
+
+对应 Tool 语义：
+
+```text
+IntentClassifier
+MasterDataTool
+RAGRetrieverTool
+GraphQueryTool
+QualityRuleTool
+RiskAssessTool
+AnswerComposer
+FeedbackRecorderTool
+```
+
+后端接口：
+
+```text
+POST /api/agent/equipment-fault/run
+GET /api/agent/runs/:id
+POST /api/agent/runs/:id/feedback
+```
+
+运行结果会返回 `agent_run_id`、`node_status`、`tool_calls`、`audit_events`、`citations`、`missing_fields`、`route` 和 `human_review_required`。如果主数据、RAG引用或关键字段不足，LangGraph 会进入 `human_review` 分支；用户反馈会追加到审计日志。
+
+说明：第一版答案生成仍采用可审计的业务模板，重点验证“企业 Agent 编排闭环”。后续可把 `AnswerComposer` 替换为真实大模型调用，并加入权限、工单系统和审批系统 Tool。
 
 ## 在线部署
 
 本项目已整理为 GitHub Pages 静态站点，部署内容来自 `public/` 目录。
+
+注意：GitHub Pages 只能运行静态前端，适合展示 `LocalStorage` 模式。`Aliyun DashVector` 模式需要把 `server.js` 部署到支持 Node 的环境，例如 Render、Railway、Fly.io、Vercel Serverless 或自有服务器。
 
 推送到 GitHub 后，在仓库的 `Settings → Pages` 中将 Source 设置为 `GitHub Actions`。每次推送到 `main` 分支都会自动发布。
 
