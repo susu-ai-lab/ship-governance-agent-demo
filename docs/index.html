@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>船舶质量知识库 Agent Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">SQ</div>
+          <div>
+            <p>ShipQuality KB</p>
+            <strong>质量知识治理平台</strong>
+          </div>
+        </div>
+
+        <nav id="sideNav" class="side-nav" aria-label="主导航">
+          <button class="active" data-page="dashboard" type="button"><span>⌂</span>治理驾驶舱</button>
+          <button data-page="ingest" type="button"><span>▦</span>数据接入</button>
+          <button data-page="workbench" type="button"><span>⇄</span>AI治理工作台</button>
+          <button data-page="config" type="button"><span>◇</span>标准配置中心</button>
+          <button data-page="rag" type="button"><span>◎</span>知识库/RAG检索</button>
+          <button data-page="agent" type="button"><span>◈</span>Agent应用与知识运营</button>
+          <button data-page="analysis" type="button"><span>▣</span>运行分析中心</button>
+        </nav>
+
+        <div class="sidebar-card">
+          <span>本地 Mock Demo</span>
+          <p>围绕压载泵振动温升主案例，演示 AI 数据治理、知识入库、RAG 检索和 Agent 应用闭环。</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AI Data Governance & RAG Agent Demo</p>
+            <h1 id="pageTitle">AI辅助数据治理与RAG Agent知识库落地Demo</h1>
+          </div>
+          <div class="top-actions">
+            <span class="sync-dot"></span>
+            <span id="stateStatus">模拟数据已加载</span>
+            <button id="rerunBtn" class="icon-btn" type="button" aria-label="重新生成">↻</button>
+          </div>
+        </header>
+
+        <section id="pageContent" class="page-content"></section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
